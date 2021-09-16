@@ -1,9 +1,11 @@
 package main
+
 import (
 	"bufio"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/eiannone/keyboard"
 	"math/rand"
 	"os"
 	"time"
@@ -11,13 +13,13 @@ import (
 import "flag"
 
 type Word struct {
-	A string `json:"a"`
-	B string `json:"b"`
+	A    string  `json:"a"`
+	B    string  `json:"b"`
 	Freq float64 `json:"freq"`
 }
 
 type Action struct {
-	Id uint32 `json:"id"`
+	Id        int  `json:"id"`
 	IsCorrect bool `json:"is_correct"`
 }
 
@@ -44,7 +46,7 @@ func readDictionary(file *os.File) *Dictionary {
 		result = append(result, word)
 	}
 
-	return &Dictionary {result }
+	return &Dictionary{result}
 }
 
 func readTrajectory(file *os.File) *Trajectory {
@@ -62,7 +64,7 @@ func readTrajectory(file *os.File) *Trajectory {
 		result = append(result, action)
 	}
 
-	return &Trajectory{ result }
+	return &Trajectory{result}
 }
 
 func sampleFromCategoricalDistribution(probs *[]float64) int {
@@ -72,7 +74,7 @@ func sampleFromCategoricalDistribution(probs *[]float64) int {
 		if i == 0 {
 			cumProbs[i] = prob
 		} else {
-			cumProbs[i] = cumProbs[i-1]	+ prob
+			cumProbs[i] = cumProbs[i-1] + prob
 		}
 	}
 
@@ -121,17 +123,51 @@ func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
 
 	categoricalDistribution := computeCategoricalDistribution(dictionary, trajectory, alpha)
 
-	stopRequested := false
+	fmt.Println("Press 'Y'/'N' to mark questions as correctly/incorrectly answered. Press 'Q' to stop the program.")
 	iter := 0
-	for !stopRequested {
+	for true {
 		wordId := sampleFromCategoricalDistribution(categoricalDistribution)
 		word := dictionary.words[wordId]
-		fmt.Println(word.A)
-		stopRequested = true
+		direction := rand.Intn(2)
+
+		var queryWord string
+		var queryLang string
+		if direction == 0 {
+			queryWord = word.A
+			queryLang = "A"
+		} else {
+			queryWord = word.B
+			queryLang = "B"
+		}
+
+		fmt.Printf("Question #%d [LANG: %s]: '%s'", iter, queryLang, queryWord)
+
+		var response rune
+		var err error
+		for response != 'y' && response != 'n' && response != 'q' {
+			response, _, err = keyboard.GetSingleKey()
+			if err != nil {
+				panic(err)
+			}
+		}
+		fmt.Printf(" [%s]\n", string(response))
+
+		var action Action
+		if response == 'y' {
+			action = Action{wordId, true}
+		} else if response == 'n' {
+			action = Action{wordId, false}
+		} else {
+			break
+		}
+
+		trajectory.actions = append(trajectory.actions, action)
+
 		iter++
 	}
-}
 
+	fmt.Println("Quitting game..")
+}
 
 func main() {
 	var alpha float64
