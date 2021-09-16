@@ -67,6 +67,20 @@ func readTrajectory(file *os.File) *Trajectory {
 	return &Trajectory{result}
 }
 
+func writeTrajectory(fname string, trajectory *Trajectory) {
+	file, err := os.OpenFile(fname, os.O_WRONLY, 0644)
+	if err != nil {
+		panic(err)
+	}
+
+	writer := bufio.NewWriter(file)
+	for _, action := range trajectory.actions {
+		_, _ = writer.WriteString(fmt.Sprintf(`{"id": %d, "is_correct": %t}`+"\n", action.Id, action.IsCorrect))
+	}
+	_ = writer.Flush()
+	_ = file.Close()
+}
+
 func sampleFromCategoricalDistribution(probs *[]float64) int {
 	nWords := len(*probs)
 	cumProbs := make([]float64, nWords)
@@ -166,7 +180,6 @@ func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
 		iter++
 	}
 
-	fmt.Println("Quitting game..")
 }
 
 func main() {
@@ -201,5 +214,6 @@ func main() {
 		dictionary := readDictionary(freqFile)
 		trajectory := readTrajectory(trajectoryFile)
 		playGame(dictionary, trajectory, alpha)
+		writeTrajectory(trajectoryFname, trajectory)
 	}
 }
