@@ -137,7 +137,10 @@ func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
 
 	categoricalDistribution := computeCategoricalDistribution(dictionary, trajectory, alpha)
 
-	fmt.Println("Press 'Y'/'N' to mark questions as correctly/incorrectly answered. Press 'Q' to stop the program.")
+	fmt.Println("Press 'S' to show the answer.")
+	fmt.Println("Press 'Y'/'N' to mark questions as correctly/incorrectly answered.")
+	fmt.Println("Press 'Q' to stop the program.")
+	fmt.Println()
 	iter := 0
 	for true {
 		wordId := sampleFromCategoricalDistribution(categoricalDistribution)
@@ -145,13 +148,19 @@ func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
 		direction := rand.Intn(2)
 
 		var queryWord string
+		var targetWord string
 		var queryLang string
+		var targetLang string
 		if direction == 0 {
 			queryWord = word.A
+			targetWord = word.B
 			queryLang = "A"
+			targetLang = "B"
 		} else {
 			queryWord = word.B
+			targetWord = word.A
 			queryLang = "B"
+			targetLang = "A"
 		}
 
 		fmt.Printf("Question #%d [LANG: %s]: '%s'", iter, queryLang, queryWord)
@@ -159,9 +168,16 @@ func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
 		var response rune
 		var err error
 		for response != 'y' && response != 'n' && response != 'q' {
-			response, _, err = keyboard.GetSingleKey()
-			if err != nil {
-				panic(err)
+			for response != 'y' && response != 'n' && response != 's' && response != 'q' {
+				response, _, err = keyboard.GetSingleKey()
+				if err != nil {
+					panic(err)
+				}
+
+				if response == 's' {
+					fmt.Printf(" [LANG: %s, '%s']", targetLang, targetWord)
+					response = '0'
+				}
 			}
 		}
 		fmt.Printf(" [%s]\n", string(response))
