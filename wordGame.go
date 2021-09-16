@@ -167,19 +167,24 @@ func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
 
 		var response rune
 		var err error
-		for response != 'y' && response != 'n' && response != 'q' {
-			for response != 'y' && response != 'n' && response != 's' && response != 'q' {
-				response, _, err = keyboard.GetSingleKey()
-				if err != nil {
-					panic(err)
-				}
+		for response != 's' && response != 'q' {
+			response, _, err = keyboard.GetSingleKey()
+			if err != nil {
+				panic(err)
+			}
 
-				if response == 's' {
-					fmt.Printf(" [LANG: %s, '%s']", targetLang, targetWord)
-					response = '0'
-				}
+			if response == 's' {
+				fmt.Printf(" [LANG: %s, '%s']", targetLang, targetWord)
 			}
 		}
+
+		for response != 'y' && response != 'n' && response != 'q' {
+			response, _, err = keyboard.GetSingleKey()
+			if err != nil {
+				panic(err)
+			}
+		}
+
 		fmt.Printf(" [%s]\n", string(response))
 
 		var action Action
