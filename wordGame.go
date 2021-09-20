@@ -5,12 +5,25 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/eiannone/keyboard"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/app"
+	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 	"math/rand"
 	"os"
 	"time"
 )
 import "flag"
+
+type WordGame struct {
+	buttons map[string]*widget.Button
+	labels  map[string]*widget.Label
+	window  fyne.Window
+
+	wordDistribution *WordDistribution
+	currentWordId    int
+	currentQueryLang string
+}
 
 type Word struct {
 	A    string  `json:"a"`
@@ -28,7 +41,16 @@ type Dictionary struct {
 }
 
 type Trajectory struct {
-	actions []Action
+	fname           string
+	actions         []Action
+	numInCurrentRun int
+}
+
+type WordDistribution struct {
+	dictionary *Dictionary
+	trajectory *Trajectory
+
+	alpha float64
 }
 
 func readDictionary(file *os.File) *Dictionary {
@@ -64,11 +86,11 @@ func readTrajectory(file *os.File) *Trajectory {
 		result = append(result, action)
 	}
 
-	return &Trajectory{result}
+	return &Trajectory{file.Name(), result, 0}
 }
 
-func writeTrajectory(fname string, trajectory *Trajectory) {
-	file, err := os.OpenFile(fname, os.O_WRONLY, 0644)
+func (trajectory *Trajectory) writeTrajectory() {
+	file, err := os.OpenFile(trajectory.fname, os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
@@ -81,9 +103,16 @@ func writeTrajectory(fname string, trajectory *Trajectory) {
 	_ = file.Close()
 }
 
+func (trajectory *Trajectory) appendTo(action Action) {
+	trajectory.actions = append(trajectory.actions, action)
+	trajectory.numInCurrentRun++
+	// TODO: Replace with append
+	trajectory.writeTrajectory()
+}
+
 func sampleFromCategoricalDistribution(probs *[]float64) int {
-	nWords := len(*probs)
-	cumProbs := make([]float64, nWords)
+	numElements := len(*probs)
+	cumProbs := make([]float64, numElements)
 	for i, prob := range *probs {
 		if i == 0 {
 			cumProbs[i] = prob
@@ -93,31 +122,31 @@ func sampleFromCategoricalDistribution(probs *[]float64) int {
 	}
 
 	t := rand.Float64()
-	var wordId int
+	var elementId int
 	for i, cumProb := range cumProbs {
 		if cumProb > t {
-			wordId = i
+			elementId = i
 			break
 		}
 	}
 
-	return wordId
+	return elementId
 }
 
-func computeCategoricalDistribution(dictionary *Dictionary, trajectory *Trajectory, alpha float64) *[]float64 {
-	nWords := len(dictionary.words)
+func (wordDistribution *WordDistribution) computeCategoricalDistribution() *[]float64 {
+	nWords := len(wordDistribution.dictionary.words)
 	result := make([]float64, nWords)
 
 	for i := 0; i < nWords; i++ {
-		result[i] = dictionary.words[i].Freq
+		result[i] = wordDistribution.dictionary.words[i].Freq
 	}
 
-	for _, action := range trajectory.actions {
+	for _, action := range wordDistribution.trajectory.actions {
 		i := action.Id
 		if action.IsCorrect {
-			result[i] *= 1 - alpha
+			result[i] *= 1 - wordDistribution.alpha
 		} else {
-			result[i] *= 1 + alpha
+			result[i] *= 1 + wordDistribution.alpha
 		}
 	}
 
@@ -133,74 +162,142 @@ func computeCategoricalDistribution(dictionary *Dictionary, trajectory *Trajecto
 	return &result
 }
 
-func playGame(dictionary *Dictionary, trajectory *Trajectory, alpha float64) {
+func newWordGame(wordDistribution *WordDistribution) *WordGame {
+	return &WordGame{
+		buttons:          make(map[string]*widget.Button, 2),
+		labels:           make(map[string]*widget.Label, 2),
+		wordDistribution: wordDistribution,
+	}
+}
 
-	categoricalDistribution := computeCategoricalDistribution(dictionary, trajectory, alpha)
+func (wordGame *WordGame) launchGameOrShowAnswer() {
+	if wordGame.currentQueryLang == "" {
+		wordGame.generateAnswer()
+		wordGame.buttons["show"].SetText("Show solution")
+	} else {
+		wordGame.buttons["show"].Disable()
+		wordGame.buttons["answeredCorrectly"].Enable()
+		wordGame.buttons["answeredIncorrectly"].Enable()
 
-	fmt.Println("Press 'S' to show the answer.")
-	fmt.Println("Press 'Y'/'N' to mark questions as correctly/incorrectly answered.")
-	fmt.Println("Press 'Q' to stop the program.")
-	fmt.Println()
-	iter := 0
-	for true {
-		wordId := sampleFromCategoricalDistribution(categoricalDistribution)
-		word := dictionary.words[wordId]
-		direction := rand.Intn(2)
-
-		var queryWord string
-		var targetWord string
-		var queryLang string
-		var targetLang string
-		if direction == 0 {
-			queryWord = word.A
-			targetWord = word.B
-			queryLang = "A"
-			targetLang = "B"
+		if wordGame.currentQueryLang == "A" {
+			wordGame.labels["LangB"].SetText(wordGame.wordDistribution.dictionary.words[wordGame.currentWordId].B)
 		} else {
-			queryWord = word.B
-			targetWord = word.A
-			queryLang = "B"
-			targetLang = "A"
+			wordGame.labels["LangA"].SetText(wordGame.wordDistribution.dictionary.words[wordGame.currentWordId].A)
 		}
+	}
+}
 
-		fmt.Printf("Question #%d [LANG: %s]: '%s'", iter, queryLang, queryWord)
+func (wordGame *WordGame) generateAnswer() {
 
-		var response rune
-		var err error
-		for response != 's' && response != 'q' {
-			response, _, err = keyboard.GetSingleKey()
-			if err != nil {
-				panic(err)
-			}
+	categoricalDistribution := wordGame.wordDistribution.computeCategoricalDistribution()
 
-			if response == 's' {
-				fmt.Printf(" [LANG: %s, '%s']", targetLang, targetWord)
-			}
-		}
+	wordId := sampleFromCategoricalDistribution(categoricalDistribution)
+	word := wordGame.wordDistribution.dictionary.words[wordId]
+	direction := rand.Intn(2)
 
-		for response != 'y' && response != 'n' && response != 'q' {
-			response, _, err = keyboard.GetSingleKey()
-			if err != nil {
-				panic(err)
-			}
-		}
-
-		fmt.Printf(" [%s]\n", string(response))
-
-		var action Action
-		if response == 'y' {
-			action = Action{wordId, true}
-		} else if response == 'n' {
-			action = Action{wordId, false}
-		} else {
-			break
-		}
-
-		trajectory.actions = append(trajectory.actions, action)
-
-		iter++
+	var queryLang string
+	if direction == 0 {
+		queryLang = "A"
+		wordGame.labels["LangA"].SetText(word.A)
+		wordGame.labels["LangB"].SetText("")
+	} else {
+		queryLang = "B"
+		wordGame.labels["LangA"].SetText("")
+		wordGame.labels["LangB"].SetText(word.B)
 	}
 
+	wordGame.buttons["show"].Enable()
+	wordGame.buttons["answeredCorrectly"].Disable()
+	wordGame.buttons["answeredIncorrectly"].Disable()
+
+	wordGame.currentWordId = wordId
+	wordGame.currentQueryLang = queryLang
+
+}
+
+func (wordGame *WordGame) answeredCorrectly() {
+	wordGame.answered(true)
+}
+
+func (wordGame *WordGame) answeredIncorrectly() {
+	wordGame.answered(false)
+}
+
+func (wordGame *WordGame) answered(correctly bool) {
+	wordGame.buttons["show"].Enable()
+	wordGame.buttons["answeredCorrectly"].Disable()
+	wordGame.buttons["answeredIncorrectly"].Disable()
+
+	action := Action{
+		Id:        wordGame.currentWordId,
+		IsCorrect: correctly,
+	}
+	wordGame.wordDistribution.trajectory.appendTo(action)
+	wordGame.labels["numAccumulatedActions"].SetText(fmt.Sprintf("Accumulated %d actions in current run", wordGame.wordDistribution.trajectory.numInCurrentRun))
+
+	wordGame.generateAnswer()
+}
+
+func (wordGame *WordGame) addLabel(text string) *widget.Label {
+	label := widget.NewLabel(text)
+	label.Alignment = fyne.TextAlignCenter
+	wordGame.labels[text] = label
+	return label
+}
+
+func (wordGame *WordGame) addLabelWithStyle(id string, text string, align fyne.TextAlign, style fyne.TextStyle) *widget.Label {
+	label := widget.NewLabelWithStyle(text, align, style)
+	wordGame.labels[id] = label
+	return label
+}
+
+func (wordGame *WordGame) addButton(id string, text string, action func()) *widget.Button {
+	button := widget.NewButton(text, action)
+	button.Importance = widget.HighImportance
+	if id != "show" {
+		button.Disable()
+	}
+	wordGame.buttons[id] = button
+	return button
+}
+
+func (wordGame *WordGame) loadUI(app fyne.App) {
+
+	programTitle := widget.NewLabelWithStyle("wordGame", fyne.TextAlignCenter, fyne.TextStyle{Bold: true, Italic: false, Monospace: false})
+
+	menu := &fyne.Menu{
+		Label: "File",
+		Items: nil,
+	}
+	mainMenu := fyne.NewMainMenu(menu)
+
+	italicStyle := fyne.TextStyle{Bold: false, Italic: true, Monospace: false}
+	numLoadedFromDictionary := widget.NewLabelWithStyle(fmt.Sprintf("Loaded %d frequency-annotated words", len(wordGame.wordDistribution.dictionary.words)), fyne.TextAlignCenter, italicStyle)
+	numLoadedFromTrajectory := widget.NewLabelWithStyle(fmt.Sprintf("Loaded %d actions from trajectory", len(wordGame.wordDistribution.trajectory.actions)), fyne.TextAlignCenter, italicStyle)
+	numAccumulatedActions := wordGame.addLabelWithStyle("numAccumulatedActions", fmt.Sprintf("Accumulated %d actions in current run", 0), fyne.TextAlignCenter, italicStyle)
+
+	labelLangA := wordGame.addLabel("LangA")
+	labelLangB := wordGame.addLabel("LangB")
+
+	wordGame.window = app.NewWindow("wordGame")
+	wordGame.window.SetMainMenu(mainMenu)
+	wordGame.window.SetContent(container.NewGridWithColumns(1,
+		programTitle,
+		container.NewGridWithColumns(3, numLoadedFromDictionary, numLoadedFromTrajectory, numAccumulatedActions),
+		container.NewGridWithColumns(2, labelLangA, labelLangB),
+		container.NewGridWithColumns(3,
+			wordGame.addButton("show", "Launch Game", wordGame.launchGameOrShowAnswer),
+			wordGame.addButton("answeredCorrectly", "Correctly answered", wordGame.answeredCorrectly),
+			wordGame.addButton("answeredIncorrectly", "Incorrectly answered", wordGame.answeredIncorrectly)),
+	))
+	wordGame.window.Show()
+}
+
+func playGame(wordDistribution *WordDistribution) {
+	app := app.New()
+	wordGame := newWordGame(wordDistribution)
+	wordGame.loadUI(app)
+	app.Run()
 }
 
 func main() {
@@ -234,7 +331,11 @@ func main() {
 
 		dictionary := readDictionary(freqFile)
 		trajectory := readTrajectory(trajectoryFile)
-		playGame(dictionary, trajectory, alpha)
-		writeTrajectory(trajectoryFname, trajectory)
+		wordDistribution := WordDistribution{
+			dictionary: dictionary,
+			trajectory: trajectory,
+			alpha:      alpha,
+		}
+		playGame(&wordDistribution)
 	}
 }
