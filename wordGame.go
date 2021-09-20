@@ -238,10 +238,10 @@ func (wordGame *WordGame) answered(correctly bool) {
 	wordGame.generateAnswer()
 }
 
-func (wordGame *WordGame) addLabel(text string) *widget.Label {
+func (wordGame *WordGame) addLabel(id string, text string) *widget.Label {
 	label := widget.NewLabel(text)
 	label.Alignment = fyne.TextAlignCenter
-	wordGame.labels[text] = label
+	wordGame.labels[id] = label
 	return label
 }
 
@@ -276,8 +276,8 @@ func (wordGame *WordGame) loadUI(app fyne.App) {
 	numLoadedFromTrajectory := widget.NewLabelWithStyle(fmt.Sprintf("Loaded %d actions from trajectory", len(wordGame.wordDistribution.trajectory.actions)), fyne.TextAlignCenter, italicStyle)
 	numAccumulatedActions := wordGame.addLabelWithStyle("numAccumulatedActions", fmt.Sprintf("Accumulated %d actions in current run", 0), fyne.TextAlignCenter, italicStyle)
 
-	labelLangA := wordGame.addLabel("LangA")
-	labelLangB := wordGame.addLabel("LangB")
+	labelLangA := wordGame.addLabel("LangA", "")
+	labelLangB := wordGame.addLabel("LangB", "")
 
 	wordGame.window = app.NewWindow("wordGame")
 	wordGame.window.SetMainMenu(mainMenu)
