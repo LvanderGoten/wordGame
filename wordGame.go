@@ -261,6 +261,17 @@ func (wordGame *WordGame) addButton(id string, text string, action func()) *widg
 	return button
 }
 
+func (wordGame *WordGame) OnTypedRune(r rune) {
+	switch r {
+	case 'a':
+		wordGame.buttons["answeredIncorrectly"].Tapped(nil)
+	case 's':
+		wordGame.buttons["show"].Tapped(nil)
+	case 'd':
+		wordGame.buttons["answeredCorrectly"].Tapped(nil)
+	}
+}
+
 func (wordGame *WordGame) loadUI(app fyne.App) {
 
 	programTitle := widget.NewLabelWithStyle("wordGame", fyne.TextAlignCenter, fyne.TextStyle{Bold: true, Italic: false, Monospace: false})
@@ -286,10 +297,11 @@ func (wordGame *WordGame) loadUI(app fyne.App) {
 		container.NewGridWithColumns(3, numLoadedFromDictionary, numLoadedFromTrajectory, numAccumulatedActions),
 		container.NewGridWithColumns(2, labelLangA, labelLangB),
 		container.NewGridWithColumns(3,
-			wordGame.addButton("show", "Launch Game", wordGame.launchGameOrShowAnswer),
-			wordGame.addButton("answeredCorrectly", "Correctly answered", wordGame.answeredCorrectly),
-			wordGame.addButton("answeredIncorrectly", "Incorrectly answered", wordGame.answeredIncorrectly)),
-	))
+			wordGame.addButton("answeredIncorrectly", "Incorrectly answered [A]", wordGame.answeredIncorrectly),
+			wordGame.addButton("show", "Launch Game [S]", wordGame.launchGameOrShowAnswer),
+			wordGame.addButton("answeredCorrectly", "Correctly answered [D]", wordGame.answeredCorrectly),
+		)))
+	wordGame.window.Canvas().SetOnTypedRune(wordGame.OnTypedRune)
 	wordGame.window.Show()
 }
 
