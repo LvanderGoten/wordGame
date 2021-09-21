@@ -316,7 +316,7 @@ func main() {
 
 	freqTableFname := flag.String("freqTableFname", "", "File name of the frequency table")
 	trajectoryFname := flag.String("trajectoryFname", "", "File name of the trajectory file")
-	flag.Float64Var(&alpha, "alpha", 0.1, "Decay level")
+	flag.Float64Var(&alpha, "alpha", 0.25, "Decay level")
 	flag.Parse()
 	if *freqTableFname == "" {
 		fmt.Println("Frequency table file not was not specified! Aborting..")
