@@ -6,5 +6,5 @@ go run wordGame.go go run wordGame.go -freqTableFname=italian-frequency-annotate
 ```
 This creates a file `trajectory.json` which can be deleted if one desires to clear the memory.
 
-# Examples
+# GUI
 ![GUI](gui.png?raw=true "GUI")
