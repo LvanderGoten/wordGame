@@ -90,15 +90,14 @@ func readTrajectory(file *os.File) *Trajectory {
 }
 
 func (trajectory *Trajectory) writeTrajectory() {
-	file, err := os.OpenFile(trajectory.fname, os.O_WRONLY, 0644)
+	file, err := os.OpenFile(trajectory.fname, os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err)
 	}
 
 	writer := bufio.NewWriter(file)
-	for _, action := range trajectory.actions {
-		_, _ = writer.WriteString(fmt.Sprintf(`{"id": %d, "is_correct": %t}`+"\n", action.Id, action.IsCorrect))
-	}
+	lastAction := trajectory.actions[len(trajectory.actions)-1]
+	_, _ = writer.WriteString(fmt.Sprintf(`{"id": %d, "is_correct": %t}`+"\n", lastAction.Id, lastAction.IsCorrect))
 	_ = writer.Flush()
 	_ = file.Close()
 }
@@ -106,7 +105,6 @@ func (trajectory *Trajectory) writeTrajectory() {
 func (trajectory *Trajectory) appendTo(action Action) {
 	trajectory.actions = append(trajectory.actions, action)
 	trajectory.numInCurrentRun++
-	// TODO: Replace with append
 	trajectory.writeTrajectory()
 }
 
@@ -173,7 +171,7 @@ func newWordGame(wordDistribution *WordDistribution) *WordGame {
 func (wordGame *WordGame) launchGameOrShowAnswer() {
 	if wordGame.currentQueryLang == "" {
 		wordGame.generateAnswer()
-		wordGame.buttons["show"].SetText("Show solution")
+		wordGame.buttons["show"].SetText("Show solution [S]")
 	} else {
 		wordGame.buttons["show"].Disable()
 		wordGame.buttons["answeredCorrectly"].Enable()
@@ -335,11 +333,7 @@ func main() {
 			fmt.Printf("Could not open %s\n", freqTableFname)
 			panic(freqErr)
 		}
-		trajectoryFile, trajectoryErr := os.Open(trajectoryFname)
-		if errors.Is(trajectoryErr, os.ErrNotExist) {
-			fmt.Printf("Could not open %s\n", trajectoryFname)
-			panic(trajectoryErr)
-		}
+		trajectoryFile, _ := os.OpenFile(trajectoryFname, os.O_RDONLY|os.O_CREATE, 0644)
 
 		dictionary := readDictionary(freqFile)
 		trajectory := readTrajectory(trajectoryFile)
